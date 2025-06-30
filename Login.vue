@@ -96,13 +96,12 @@ export default {
       }
     }
 
-    // **RETURN all refs and functions used in the template**
-    return {
+      return {
       username,
       password,
       loading,
       errorMessage,
-      handleLogin   // <-- Make sure to return this!
+      handleLogin  
     }
   }
 }
