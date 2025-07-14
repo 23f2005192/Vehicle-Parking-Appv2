@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from datetime import datetime
 
-from databse import db, User,ParkingLot,ParkingSpot
+from databse import db, User,ParkingLot,ParkingSpot,Reserve
 
 app = Flask(__name__)
 
@@ -91,7 +91,20 @@ def parkinglot():
 
     db.session.add(user)
     db.session.commit()
-    return jsonify({"message": "Parking lot added successfully"}), 201
+
+  
+    for i in range(1, data["spots"] + 1):
+        spot = ParkingSpot(
+            spot_number=i,
+            status='F', 
+            parking_lot_id=user.id
+        )
+        db.session.add(spot)
+
+    db.session.commit()
+
+    return jsonify({"message": "Parking lot added successfully with spots"}), 201
+
 @app.route("/get_parkinglots", methods=["GET"])
 def get_parkinglots():
     parkinglots = ParkingLot.query.all()
@@ -110,13 +123,43 @@ def get_parkinglots():
 def update_parking_lot(id):
     data = request.json
     lot = ParkingLot.query.get_or_404(id)
+
+    
     lot.name = data['name']
     lot.price = data['price']
     lot.address = data['address']
     lot.pincode = data['pincode']
-    lot.spots = data['spots']
+
+
+    new_spot_count = data['spots']
+    current_spots = ParkingSpot.query.filter_by(parking_lot_id=lot.id).order_by(ParkingSpot.spot_number).all()
+    current_count = len(current_spots)
+
+    if new_spot_count > current_count:
+        
+        for i in range(current_count + 1, new_spot_count + 1):
+            new_spot = ParkingSpot(
+                spot_number=i,
+                status='F', 
+                parking_lot_id=lot.id
+            )
+            db.session.add(new_spot)
+
+    elif new_spot_count < current_count:
+       
+        to_delete = current_spots[new_spot_count:]
+        for spot in to_delete:
+            has_reservations = Reserve.query.filter_by(parking_spot_id=spot.id).first()
+            if has_reservations:
+                return jsonify({'error': f"Cannot delete spot {spot.spot_number}, it has reservations."}), 400
+            db.session.delete(spot)
+
+    lot.spots = new_spot_count
     db.session.commit()
+
     return jsonify({'message': 'Updated successfully'})
+
+    
 
 @app.route('/edit_user/<int:id>', methods=['PUT'])
 def edit_user(id):
@@ -150,19 +193,30 @@ def get_enrolled_users():
     return jsonify(user_list)
 @app.route("/parkinglot/<int:lot_id>/spots", methods=["GET"])
 def get_spots_for_lot(lot_id):
+   
     lot = ParkingLot.query.get_or_404(lot_id)
 
+   
+    spots = ParkingSpot.query.filter_by(parking_lot_id=lot_id).all()
+
+    spots_data = [
+        {
+            "id": spot.id,
+            "spot_number": spot.spot_number,
+            "status": spot.status
+        } for spot in spots
+    ]
+
+    
     lot_data = {
         "id": lot.id,
         "name": lot.name,
-        "price": lot.price,
-        "address": lot.address,
-        "pincode": lot.pincode,
-        "spots": list(range(1, lot.spots + 1))
-
+        "spots": spots_data
     }
 
     return jsonify({"lot": lot_data})
+
+
 
 
 

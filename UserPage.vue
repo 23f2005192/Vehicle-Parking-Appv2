@@ -1,6 +1,6 @@
 <template>
   <div>
-  
+
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
       <div class="container-fluid">
         <span class="navbar-brand fw-bold text-primary">
@@ -16,40 +16,60 @@
         </div>
       </div>
     </nav>
-   <div class="container mt-4">
-  <input
-    type="text"
-    class="form-control"
-    placeholder="Search Parking Lots..."
-    v-model="searchQuery"
-    @input="searchParkingLots"
-  />
-  <ul v-if="searchResults.length" class="list-group mt-2">
-    <li
-      v-for="lot in searchResults"
-      :key="lot.id"
-      class="list-group-item list-group-item-action"
-      @click="selectParkingLot(lot)"
-      style="cursor: pointer;"
-    >
-      {{ lot.name }} - {{ lot.address }} (₹{{ lot.price }})
-    </li>
-  </ul>
-  <p v-else-if="searchQuery && !searchResults.length" class="mt-2" style="color: white;">
-  No results found.
-</p>
 
-</div>
+  
 
-   
-    
+
 
 
     <div class="container mt-5 text-center">
-      <h2 class="text-muted fw-light">Welcome to User Dashboard</h2>
+      <h2 class="text-light">Welcome to User Dashboard</h2>
+    </div>
+    
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 50vh;">
+  <div class="w-75">
+
+    <div class="input-group mb-4">
+      <input
+        type="text"
+        class="form-control"
+        placeholder="Search by name or pincode..."
+        v-model="searchQuery"
+      />
+      <button class="btn btn-primary" @click="performSearch">Search</button>
     </div>
 
+    <!-- Results Table -->
+    <div v-if="searchPerformed">
+      <div v-if="searchResults.length">
+        <table class="table table-bordered table-hover shadow-sm">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>Price (₹)</th>
+              <th>Available Spots</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="lot in searchResults" :key="lot.id">
+              <td>{{ lot.name }}</td>
+              <td>{{ lot.address }}</td>
+              <td>{{ lot.price }}</td>
+              <td>{{ lot.spots }}</td>
+              <td><button class="btn btn-outline-success btn-sm">Book</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else class="text-muted mt-3">No results found.</p>
+    </div>
+  </div>
+</div>
 
+
+   
     <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content text-dark">
@@ -81,7 +101,7 @@
       </div>
     </div>
 
-    
+    <
     <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -114,21 +134,25 @@ const userData = ref({
   phonenumber: '',
   address: ''
 });
-const errorMessage = ref(null);
-
 const searchQuery = ref('');
 const searchResults = ref([]);
-
 
 onMounted(async () => {
   const userId = route.params.id;
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/get_user/${userId}`);
-    userData.value = data;
-    username.value = data.name || 'User';
+
+
+    userData.value = {
+      name: data.name || '',
+      phonenumber: data.phonenumber || '',
+      address: data.address || ''
+    };
+
+    username.value = userData.value.name || 'User';
   } catch (error) {
     console.error('Failed to fetch user:', error);
-    errorMessage.value = 'Failed to load user data. Please check backend.';
+    alert('Error loading user data.');
   }
 });
 
@@ -140,15 +164,17 @@ const updateUser = async () => {
       phonenumber: userData.value.phonenumber,
       address: userData.value.address
     });
-    alert('User updated successfully!');
-    username.value = userData.value.name;
 
+    username.value = userData.value.name;
+    alert('User updated successfully!');
+
+   
     const modalEl = document.getElementById('editModal');
     const modal = bootstrap.Modal.getInstance(modalEl);
     modal?.hide();
   } catch (error) {
     console.error('Failed to update user:', error);
-    alert('Failed to update user. Please try again.');
+    alert('Update failed. Please try again.');
   }
 };
 
@@ -161,34 +187,29 @@ const logout = () => {
 };
 
 let searchTimeout = null;
-const searchParkingLots = () => {
-  if (searchTimeout) clearTimeout(searchTimeout);
 
-  searchTimeout = setTimeout(async () => {
-    if (!searchQuery.value.trim()) {
-      searchResults.value = [];
-      return;
-    }
-    try {
-      const { data } = await axios.get('http://127.0.0.1:5000/parkinglot/search', {
-        params: { q: searchQuery.value.trim() }
-      });
-      searchResults.value = data;
-    } catch (error) {
-      console.error('Search failed:', error);
-      searchResults.value = [];
-    }
-  }, 300); 
-};
-
-const selectParkingLot = (lot) => {
-  alert(`You selected: ${lot.name} at ${lot.address}`);
-
-  searchQuery.value = '';
+const searchPerformed = ref(false); 
+const performSearch = async () => {
+  searchPerformed.value = false;
   searchResults.value = [];
+
+  const query = searchQuery.value.trim();
+  if (!query) return;
+
+  try {
+    const { data } = await axios.get('http://127.0.0.1:5000/parkinglot/search', {
+      params: { q: query }
+    });
+
+    searchResults.value = data;
+    searchPerformed.value = true;
+  } catch (error) {
+    console.error('Search error:', error);
+    searchResults.value = [];
+    searchPerformed.value = true;
+  }
 };
-
-
-
 
 </script>
+
+

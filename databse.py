@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-
+from flask_bcrypt import Bcrypt
 db = SQLAlchemy()
 
 class User(db.Model):
@@ -9,9 +9,10 @@ class User(db.Model):
     type = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(50), nullable=False)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(50), nullable=False)
+    password = db.Column(db.String(128), nullable=False)
     address = db.Column(db.String(50))
     phonenumber = db.Column(db.String(10), nullable=False)
+
 
     reservations = db.relationship('Reserve', back_populates='user', cascade="all, delete", passive_deletes=True)
 
@@ -32,11 +33,13 @@ class ParkingSpot(db.Model):
     __tablename__ = "parkingspot"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    status = db.Column(db.String(2), nullable=False)
+    spot_number = db.Column(db.Integer, nullable=False) 
+    status = db.Column(db.String(2), nullable=False)    
     parking_lot_id = db.Column(db.Integer, db.ForeignKey("parkinglot.id", ondelete='CASCADE'))
 
     parking_lot = db.relationship('ParkingLot', back_populates='parking_spots', passive_deletes=True)
     reservations = db.relationship('Reserve', back_populates='parking_spot', cascade="all, delete", passive_deletes=True)
+
 
 class Reserve(db.Model):
     __tablename__ = "reserve"
@@ -56,3 +59,22 @@ class Reserve(db.Model):
     user = db.relationship("User", back_populates="reservations", passive_deletes=True)
     parking_spot = db.relationship("ParkingSpot", back_populates="reservations", passive_deletes=True)
     parking_lot = db.relationship("ParkingLot", back_populates="reservations", passive_deletes=True)
+def create_admin_user(app):
+    bcrypt = Bcrypt(app)
+    with app.app_context():
+        
+        db.create_all()
+        if not User.query.filter_by(username="admin").first():
+            hashed_password = bcrypt.generate_password_hash("123").decode("utf-8")
+            admin = User(
+                name="Admin",
+                username="admin",
+                password=hashed_password,
+                type="admin",
+                address="Admin Address",
+                phonenumber="1234567890"
+            )
+            db.session.add(admin)
+            db.session.commit()
+         
+    

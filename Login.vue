@@ -6,6 +6,7 @@
           <div class="card-body">
             <h3 class="card-title text-center mb-4">Login</h3>
             <form @submit.prevent="handleLogin">
+             
               <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
                 <input
@@ -20,20 +21,35 @@
 
               <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
-                <input
-                  id="password"
-                  v-model="password"
-                  type="password"
-                  class="form-control"
-                  placeholder="Enter your password"
-                  required
-                />
+                <div class="input-group">
+                  <input
+                    :type="showPassword ? 'text' : 'password'"
+                    id="password"
+                    v-model="password"
+                    class="form-control"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <span class="input-group-text bg-white border-start-0">
+                    <button
+                      type="button"
+                      class="btn btn-icon"
+                      @click="togglePassword"
+                      tabindex="-1"
+                      aria-label="Toggle password visibility"
+                    >
+                      <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
+                    </button>
+                  </span>
+                </div>
               </div>
 
+          
               <div v-if="errorMessage" class="alert alert-danger" role="alert">
                 {{ errorMessage }}
               </div>
 
+              
               <button type="submit" class="btn btn-primary w-100" :disabled="loading">
                 {{ loading ? 'Logging in...' : 'Login' }}
               </button>
@@ -61,6 +77,11 @@ export default {
     const password = ref('')
     const loading = ref(false)
     const errorMessage = ref('')
+    const showPassword = ref(false)
+
+    const togglePassword = () => {
+      showPassword.value = !showPassword.value
+    }
 
     const handleLogin = async () => {
       if (!username.value || !password.value) {
@@ -96,14 +117,18 @@ export default {
       }
     }
 
-      return {
+    return {
       username,
       password,
       loading,
       errorMessage,
-      handleLogin  
+      handleLogin,
+      showPassword,
+      togglePassword
     }
   }
 }
-
 </script>
+
+
+

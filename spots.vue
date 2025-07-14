@@ -4,10 +4,16 @@
 
     <div v-if="lot">
       <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
-        <div v-for="spot in lot.spots" :key="spot" class="col">
-          <div class="card text-center shadow-sm h-100">
+        <div v-for="spot in lot.spots" :key="spot.id" class="col">
+          <div
+            class="card text-center shadow-sm h-100"
+            :class="spot.status === 'F' ? 'bg-success text-white' : 'bg-danger text-white'"
+          >
             <div class="card-body">
-              <h5 class="card-title">Spot {{ spot }}</h5>
+              <h5 class="card-title">Spot {{ spot.spot_number }}</h5>
+              <p class="card-text">
+                {{ spot.status === 'F' ? 'Available' : 'Occupied' }}
+              </p>
             </div>
           </div>
         </div>
@@ -19,6 +25,7 @@
     </div>
   </div>
 </template>
+
 
 <script>
 import { ref, onMounted } from 'vue'
@@ -34,7 +41,8 @@ export default {
 
     onMounted(async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/parkinglot/${lotId}/spots`)
+        const res = await axios.get(`http://127.0.0.1:5000/parkinglot/${lotId}/spots`)
+
         lot.value = res.data.lot
       } catch (error) {
         console.error("Error fetching lot:", error)
