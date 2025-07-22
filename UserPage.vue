@@ -25,7 +25,51 @@
     <div class="container mt-5 text-center">
       <h2 class="text-light">Welcome to User Dashboard</h2>
     </div>
-    
+  <table v-if="reservations.length" class="table table-striped table-hover shadow-sm">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>Vehicle No</th>
+      <th>Start Date</th>
+      
+      <th>Location</th>
+      <th>status</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr v-for="r in reservations" :key="r.id">
+      <td>{{ r.id }}</td>
+      <td>{{ r.vehicle_no }}</td>
+      <td>{{ r.start_date }}</td>
+      
+      <td>{{ r.parking_lot_name }}</td>
+      <td>{{ r.status }}</td>
+      <td>
+        
+  <button
+  v-if="r.status === 'T'"
+  class="btn btn-sm btn-outline-danger"
+  data-bs-toggle="modal"
+  data-bs-target="#releaseModal"
+  @click="prepareRelease(r)"
+>
+  Occupied
+</button>
+<button
+  v-else
+  class="btn btn-sm btn-outline-success"
+  
+>
+  Release
+</button>
+
+     
+</td>
+    </tr>
+  </tbody>
+</table>
+
 <div class="container d-flex justify-content-center align-items-center" style="min-height: 50vh;">
   <div class="w-75">
 
@@ -39,7 +83,7 @@
       <button class="btn btn-primary" @click="performSearch">Search</button>
     </div>
 
-    <!-- Results Table -->
+    
     <div v-if="searchPerformed">
       <div v-if="searchResults.length">
         <table class="table table-bordered table-hover shadow-sm">
@@ -58,12 +102,17 @@
               <td>{{ lot.address }}</td>
               <td>{{ lot.price }}</td>
               <td>{{ lot.spots }}</td>
-              <td><button class="btn btn-outline-success btn-sm">Book</button></td>
+               <td>
+              <button class="btn btn-outline-success btn-sm" @click="openBookingModal(lot)">
+                Book
+              </button>
+              </td>
+
             </tr>
           </tbody>
         </table>
       </div>
-      <p v-else class="text-muted mt-3">No results found.</p>
+      <p v-else class="text-light mt-3">No results found.</p>
     </div>
   </div>
 </div>
@@ -101,7 +150,7 @@
       </div>
     </div>
 
-    <
+    
     <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -118,6 +167,54 @@
       </div>
     </div>
   </div>
+  <div class="modal fade" id="bookModal" tabindex="-1" aria-labelledby="bookModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-dark">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bookModalLabel">Book Parking Spot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form @submit.prevent="confirmBooking">
+        <div class="modal-body">
+          <p><strong>Lot:</strong> {{ selectedLot?.name }}</p>
+          <div class="mb-3">
+            <label for="vehicle" class="form-label">Vehicle Number</label>
+            <input v-model="vehicleNo" type="text" class="form-control" id="vehicle" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Confirm Booking</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="releaseModal" tabindex="-1" aria-labelledby="releaseModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-dark">
+      <div class="modal-header">
+        <h5 class="modal-title" id="releaseModalLabel">Release Spot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" v-if="modalData.id !== null">
+        <p><strong>Vehicle No:</strong> {{ modalData.vehicle_no }}</p>
+        <p><strong>Start Date:</strong> {{ modalData.start_date }}</p>
+        <p><strong>Start Time:</strong> {{ modalData.start_time }}</p>
+        <p><strong>Lot:</strong> {{ modalData.parking_lot_name }}</p>
+        <p><strong>Spot ID:</strong> {{ modalData.parking_spot_id }}</p>
+        <p><strong>Cost:</strong> ₹{{ modalData.cost }}</p>
+        <p class="text-danger">Note: These fields are auto-filled and cannot be edited.</p>
+       </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" @click="releaseReservation">Confirm Release</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </template>
 
 <script setup>
@@ -129,6 +226,7 @@ const route = useRoute();
 const router = useRouter();
 
 const username = ref('User');
+
 const userData = ref({
   name: '',
   phonenumber: '',
@@ -150,9 +248,10 @@ onMounted(async () => {
     };
 
     username.value = userData.value.name || 'User';
+    userphonenumber.value = userData.value.phonenumber || 'User';
   } catch (error) {
     console.error('Failed to fetch user:', error);
-    alert('Error loading user data.');
+    
   }
 });
 
@@ -166,6 +265,7 @@ const updateUser = async () => {
     });
 
     username.value = userData.value.name;
+    
     alert('User updated successfully!');
 
    
@@ -183,7 +283,7 @@ const goHome = () => {
 };
 
 const logout = () => {
-  router.push('/');
+  router.push('/l');
 };
 
 let searchTimeout = null;
@@ -209,6 +309,103 @@ const performSearch = async () => {
     searchPerformed.value = true;
   }
 };
+const selectedLot = ref(null);
+const vehicleNo = ref('');
+
+const openBookingModal = (lot) => {
+  selectedLot.value = lot;
+  vehicleNo.value = '';
+  const modal = new bootstrap.Modal(document.getElementById('bookModal'));
+  modal.show();
+};
+
+const confirmBooking = async () => {
+  const userId = route.params.id;
+  try {
+    const { data } = await axios.post('http://127.0.0.1:5000/reserve_spot', {
+      user_id: userId,
+      parking_lot_id: selectedLot.value.id,
+      vehicle_no: vehicleNo.value
+    });
+
+    alert(data.message);
+    bootstrap.Modal.getInstance(document.getElementById('bookModal'))?.hide();
+    performSearch(); 
+  } catch (error) {
+    alert(error.response?.data?.message || 'Booking failed');
+  }
+};
+const reservations = ref([]);
+
+
+const fetchReservations = async () => {
+  const userId = route.params.id;
+  try {
+    const { data } = await axios.get(`http://127.0.0.1:5000/get_reservations/${userId}`);
+    reservations.value = data;
+  } catch (error) {
+    console.error('Failed to fetch reservations:', error);
+    alert('Could not load reservation history.');
+  }
+};
+
+onMounted(() => {
+  fetchReservations();
+});
+
+
+const modalData = ref({
+  id: null,
+  vehicle_no: '',
+  start_date: '',
+  start_time: '',
+  parking_lot_name: '',
+  parking_spot_id: null,
+  cost: 0
+});
+const prepareRelease = async (reservation) => {
+  try {
+    const { data } = await axios.get(`http://127.0.0.1:5000/api/reservations/${reservation.id}`);
+    
+    modalData.value = {
+      id: data.id,
+      vehicle_no: data.vehicle_no,
+      start_date: data.start_date,
+      start_time: data.start_time || '--:--', 
+      parking_lot_name: data.parking_lot_name,
+      parking_spot_id: data.parking_spot_id,
+      cost: data.cost || 0
+    };
+
+    
+    const modal = new bootstrap.Modal(document.getElementById('releaseModal'));
+    modal.show();
+  } catch (error) {
+    console.error('Failed to fetch reservation:', error);
+    alert('Failed to load reservation info.');
+  }
+};
+const releaseReservation = async () => {
+  try {
+    const payload = {
+      reserve_id: modalData.value.id,
+      spot_id: modalData.value.parking_spot_id
+    };
+
+    const { data } = await axios.post('http://127.0.0.1:5000/release_spot', payload);
+
+    alert(data.message);
+    bootstrap.Modal.getInstance(document.getElementById('releaseModal'))?.hide();
+
+    modalData.value = {}; 
+    fetchReservations();  
+  } catch (error) {
+    console.error('Error releasing spot:', error);
+    alert(error.response?.data?.message || 'Failed to release spot.');
+  }
+};
+
+
 
 </script>
 

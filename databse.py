@@ -55,14 +55,15 @@ class Reserve(db.Model):
     starttime = db.Column(db.Time)
     endtime = db.Column(db.Time)
     cost = db.Column(db.Integer)
-
+    status=db.Column(db.String(2), nullable=False)
     user = db.relationship("User", back_populates="reservations", passive_deletes=True)
     parking_spot = db.relationship("ParkingSpot", back_populates="reservations", passive_deletes=True)
     parking_lot = db.relationship("ParkingLot", back_populates="reservations", passive_deletes=True)
+    
 def create_admin_user(app):
     bcrypt = Bcrypt(app)
     with app.app_context():
-        
+        db.drop_all()
         db.create_all()
         if not User.query.filter_by(username="admin").first():
             hashed_password = bcrypt.generate_password_hash("123").decode("utf-8")

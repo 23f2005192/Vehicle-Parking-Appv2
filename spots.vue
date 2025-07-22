@@ -1,12 +1,12 @@
 <template>
-  <div class="container mt-4">
+  <div class="container">
     <h2 class="mb-4">Parking Lot: {{ lot?.name || 'Loading...' }}</h2>
 
     <div v-if="lot">
-      <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-3">
+      <div class="row row-cols-6 row-cols-sm-7 row-cols-md-8 row-cols-lg-9 g-3">
         <div v-for="spot in lot.spots" :key="spot.id" class="col">
           <div
-            class="card text-center shadow-sm h-100"
+            class="card text-center shadow-sm h-100 "
             :class="spot.status === 'F' ? 'bg-success text-white' : 'bg-danger text-white'"
           >
             <div class="card-body">

@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify,redirect
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from datetime import datetime
+from sqlalchemy import func
 
 from databse import db, User,ParkingLot,ParkingSpot,Reserve
 
@@ -231,42 +232,6 @@ def update_spot_status(spot_id):
     spot.status = data["status"]
     db.session.commit()
     return jsonify({"message": "Spot status updated"})
-@app.route('/search_parking_spots', methods=['GET'])
-def search_parking_spots():
-    query = request.args.get('q', '').strip()
-
-    if not query:
-        return jsonify([])
-
-    
-    try:
-        query_int = int(query)
-    except ValueError:
-        query_int = None
-
-    results = db.session.query(ParkingSpot).join(ParkingLot).filter(
-        (ParkingLot.name.ilike(f"%{query}%")) |
-        (ParkingLot.address.ilike(f"%{query}%")) |
-        (ParkingLot.pincode == query_int) |
-        (ParkingLot.price == query_int) |
-        (ParkingLot.spots == query_int)
-    ).all()
-
-    return jsonify([
-        {
-
-            'parking_lot': {
-                'id': spot.parking_lot.id,
-                'name': spot.parking_lot.name,
-                'address': spot.parking_lot.address,
-                'pincode': spot.parking_lot.pincode,
-                'price': spot.parking_lot.price,
-                'spots': spot.parking_lot.spots
-            }
-        }
-        for spot in results
-    ])
-
 
 @app.route('/parkinglot/search')
 def parkinglot_search():
@@ -275,25 +240,152 @@ def parkinglot_search():
         return jsonify([])
 
     
-    filters = []
     if q.isdigit():
         filters = (ParkingLot.name.ilike(f'%{q}%')) | (ParkingLot.pincode == int(q))
     else:
         filters = ParkingLot.name.ilike(f'%{q}%')
 
-    results = ParkingLot.query.filter(filters).all()
+    
+    parking_lots = ParkingLot.query.filter(filters).all()
 
-    return jsonify([
-        {
-            'id': p.id,
-            'name': p.name,
-            'price': p.price,
-            'address': p.address,
-            'pincode': p.pincode,
-            'spots': p.spots
-        } for p in results
-    ])
+    
+    result = []
+    for lot in parking_lots:
+        free_spots_count = (
+            db.session.query(func.count(ParkingSpot.id))
+            .filter(ParkingSpot.parking_lot_id == lot.id, ParkingSpot.status == 'F')
+            .scalar()
+        )
 
+        result.append({
+            'id': lot.id,
+            'name': lot.name,
+            'price': lot.price,
+            'address': lot.address,
+            'pincode': lot.pincode,
+            'spots': free_spots_count
+        })
+
+    return jsonify(result)
+@app.route('/reserve_spot', methods=['POST'])
+def reserve_spot():
+    data = request.json
+    user_id = data['user_id']
+    lot_id = data['parking_lot_id']
+    vehicle_no = data['vehicle_no']
+    start_date = datetime.utcnow().date()
+    start_time = datetime.utcnow().time()
+
+    try:
+        with db.session.begin_nested(): 
+           
+            spot = db.session.execute(
+                db.select(ParkingSpot)
+                .with_for_update()
+                .filter_by(parking_lot_id=lot_id, status='F')
+                .order_by(ParkingSpot.id)
+                .limit(1)
+            ).scalar_one_or_none()
+
+            if not spot:
+                return jsonify({"message": "No available spots"}), 400
+
+   
+            spot.status = 'reserved'
+
+     
+            reservation = Reserve(
+                parking_spot_id=spot.id,
+                parking_lot_id=lot_id,
+                user_id=user_id,
+                vehicle_no=vehicle_no,
+                startdate=start_date,
+                starttime=start_time,
+                status='T'
+            )
+            db.session.add(reservation)
+        db.session.commit()
+        return jsonify({"message": "Reservation successful", "spot_id": spot.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "Error during reservation", "error": str(e)}), 500
+
+
+@app.route('/get_reservations/<int:user_id>', methods=['GET'])
+def get_reservations(user_id):
+    reservations = Reserve.query.filter_by(user_id=user_id).all()
+
+    result = []
+    for r in reservations:
+        result.append({
+            'id': r.id,
+            'vehicle_no': r.vehicle_no,
+            'start_date': r.startdate.isoformat() if r.startdate else None,
+            
+            'parking_lot_name': r.parking_lot.name if r.parking_lot else 'Unknown',
+            'status':r.status
+        })
+
+    return jsonify(result)
+@app.route('/api/reservations/<int:reservation_id>', methods=['GET'])
+def get_reservation(reservation_id):
+    reservation = Reserve.query.filter_by(id=reservation_id).first()
+
+    
+ 
+
+   
+    return jsonify({
+        'id': reservation.id,
+        'vehicle_no': reservation.vehicle_no,
+        'start_date': reservation.startdate.strftime('%Y-%m-%d'),
+        
+        'parking_lot_name': reservation.parking_lot.name,
+        'parking_spot_id':reservation.parking_spot_id ,
+        'cost': reservation.parking_lot.price
+    })
+
+@app.route('/release_spot', methods=['POST'])
+def release_spot():
+    data = request.get_json()
+    reserve_id = data.get('reserve_id')
+    spot_id = data.get('spot_id')
+
+    try:
+        reservation = Reserve.query.get(reserve_id)
+        if not reservation:
+            return jsonify({'message': 'Reservation not found'}), 404
+
+        
+        now = datetime.now()
+        start_datetime = datetime.combine(reservation.startdate, reservation.starttime)
+        duration_hours = max(1, int((now - start_datetime).total_seconds() // 3600))
+
+      
+        parking_lot = ParkingLot.query.get(reservation.parking_lot_id)
+        if not parking_lot:
+            return jsonify({'message': 'Parking lot not found'}), 404
+
+        cost = duration_hours * parking_lot.price
+
+      
+        reservation.enddate = now.date()
+        reservation.endtime = now.time()
+        reservation.cost = cost
+        reservation.status = 'F'  
+
+   
+        spot = ParkingSpot.query.get(spot_id)
+        if spot:
+            spot.status = 'F'
+
+        db.session.commit()
+
+        return jsonify({'message': 'Spot released successfully', 'cost': cost}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error: {str(e)}'}), 500
 
 
 

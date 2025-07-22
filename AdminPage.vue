@@ -37,7 +37,7 @@
         class="d-flex justify-content-center align-items-center flex-column"
         style="height: 200px;"
       >
-        <p class="text-muted">No parking lots available yet.</p>
+        <p class="text-light">No parking lots available yet.</p>
       </div>
 
       <div class="modal fade show d-block" tabindex="-1" role="dialog" v-if="showForm">
