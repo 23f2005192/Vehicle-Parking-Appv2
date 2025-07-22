@@ -38,7 +38,7 @@
     </tr>
   </thead>
   <tbody>
-    <tr v-for="r in reservations" :key="r.id">
+    <tr v-for="r in paginatedReservations" :key="r.id">
       <td>{{ r.id }}</td>
       <td>{{ r.vehicle_no }}</td>
       <td>{{ r.start_date }}</td>
@@ -59,6 +59,9 @@
 <button
   v-else
   class="btn btn-sm btn-outline-success"
+  data-bs-toggle="modal"
+  data-bs-target="#dataModal"
+  @click="ReleaseData(r)"
   
 >
   Release
@@ -67,13 +70,26 @@
      
 </td>
     </tr>
+
   </tbody>
 </table>
+<div class="text-center my-3" v-if="reservations.length > itemsPerPage">
+  <button class="btn btn-outline-secondary me-2"
+          @click="currentIndex = Math.max(0, currentIndex - itemsPerPage)"
+          :disabled="currentIndex === 0">
+    Previous
+  </button>
+  <button class="btn btn-outline-primary"
+          @click="currentIndex += itemsPerPage"
+          :disabled="currentIndex + itemsPerPage >= reservations.length">
+    Next
+  </button>
+</div>
+<div class="container d-flex flex-column align-items-center" style="min-height: 50vh;">
 
-<div class="container d-flex justify-content-center align-items-center" style="min-height: 50vh;">
-  <div class="w-75">
+    <div class="w-100" style="max-width: 500px;">
 
-    <div class="input-group mb-4">
+    <div class="input-group mb-2">
       <input
         type="text"
         class="form-control"
@@ -214,11 +230,34 @@
     </div>
   </div>
 </div>
+<div class="modal fade" id="dataModal" tabindex="-1" aria-labelledby="dataModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-dark">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dataModalLabel">data Spot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" v-if="modalData.id !== null">
+        <p><strong>Vehicle No:</strong> {{ modalData.vehicle_no }}</p>
+        <p><strong>Start Date:</strong> {{ modalData.start_date }}</p>
+        <p><strong>Start Time:</strong> {{ modalData.start_time }}</p>
+        <p><strong>Lot:</strong> {{ modalData.parking_lot_name }}</p>
+        <p><strong>Spot ID:</strong> {{ modalData.parking_spot_id }}</p>
+        <p><strong>Cost:</strong> ₹{{ modalData.cost }}</p>
+      
+       </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+             </div>
+    </div>
+  </div>
+</div>
 
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 
@@ -226,33 +265,49 @@ const route = useRoute();
 const router = useRouter();
 
 const username = ref('User');
+const userData = ref({ name: '', phonenumber: '', address: '' });
 
-const userData = ref({
-  name: '',
-  phonenumber: '',
-  address: ''
-});
 const searchQuery = ref('');
 const searchResults = ref([]);
+const searchPerformed = ref(false);
+
+const selectedLot = ref(null);
+const vehicleNo = ref('');
+
+const reservations = ref([]);
+const currentIndex = ref(0);
+const itemsPerPage = 3;
+
+const paginatedReservations = computed(() => {
+  const sorted = [...reservations.value].sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+  return sorted.slice(currentIndex.value, currentIndex.value + itemsPerPage);
+});
+
+const modalData = ref({
+  id: null,
+  vehicle_no: '',
+  start_date: '',
+  start_time: '',
+  parking_lot_name: '',
+  parking_spot_id: null,
+  cost: 0
+});
 
 onMounted(async () => {
   const userId = route.params.id;
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/get_user/${userId}`);
-
-
     userData.value = {
       name: data.name || '',
       phonenumber: data.phonenumber || '',
       address: data.address || ''
     };
-
     username.value = userData.value.name || 'User';
-    userphonenumber.value = userData.value.phonenumber || 'User';
   } catch (error) {
     console.error('Failed to fetch user:', error);
-    
   }
+
+  await fetchReservations();
 });
 
 const updateUser = async () => {
@@ -263,15 +318,9 @@ const updateUser = async () => {
       phonenumber: userData.value.phonenumber,
       address: userData.value.address
     });
-
     username.value = userData.value.name;
-    
     alert('User updated successfully!');
-
-   
-    const modalEl = document.getElementById('editModal');
-    const modal = bootstrap.Modal.getInstance(modalEl);
-    modal?.hide();
+    bootstrap.Modal.getInstance(document.getElementById('editModal'))?.hide();
   } catch (error) {
     console.error('Failed to update user:', error);
     alert('Update failed. Please try again.');
@@ -279,28 +328,22 @@ const updateUser = async () => {
 };
 
 const goHome = () => {
-  router.push(`/user/${route.params.id}`);
+  window.location.href = `/user/${route.params.id}`;
 };
 
 const logout = () => {
-  router.push('/l');
+  window.location.href='/'
 };
 
-let searchTimeout = null;
-
-const searchPerformed = ref(false); 
 const performSearch = async () => {
   searchPerformed.value = false;
   searchResults.value = [];
-
   const query = searchQuery.value.trim();
   if (!query) return;
-
   try {
     const { data } = await axios.get('http://127.0.0.1:5000/parkinglot/search', {
       params: { q: query }
     });
-
     searchResults.value = data;
     searchPerformed.value = true;
   } catch (error) {
@@ -309,8 +352,6 @@ const performSearch = async () => {
     searchPerformed.value = true;
   }
 };
-const selectedLot = ref(null);
-const vehicleNo = ref('');
 
 const openBookingModal = (lot) => {
   selectedLot.value = lot;
@@ -327,57 +368,39 @@ const confirmBooking = async () => {
       parking_lot_id: selectedLot.value.id,
       vehicle_no: vehicleNo.value
     });
-
     alert(data.message);
     bootstrap.Modal.getInstance(document.getElementById('bookModal'))?.hide();
-    performSearch(); 
+    await fetchReservations();
+    performSearch();
   } catch (error) {
     alert(error.response?.data?.message || 'Booking failed');
   }
 };
-const reservations = ref([]);
-
 
 const fetchReservations = async () => {
   const userId = route.params.id;
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/get_reservations/${userId}`);
     reservations.value = data;
+    currentIndex.value = 0;   
   } catch (error) {
     console.error('Failed to fetch reservations:', error);
     alert('Could not load reservation history.');
   }
 };
 
-onMounted(() => {
-  fetchReservations();
-});
-
-
-const modalData = ref({
-  id: null,
-  vehicle_no: '',
-  start_date: '',
-  start_time: '',
-  parking_lot_name: '',
-  parking_spot_id: null,
-  cost: 0
-});
 const prepareRelease = async (reservation) => {
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/api/reservations/${reservation.id}`);
-    
     modalData.value = {
       id: data.id,
       vehicle_no: data.vehicle_no,
       start_date: data.start_date,
-      start_time: data.start_time || '--:--', 
+      start_time: data.start_time || '--:--',
       parking_lot_name: data.parking_lot_name,
       parking_spot_id: data.parking_spot_id,
       cost: data.cost || 0
     };
-
-    
     const modal = new bootstrap.Modal(document.getElementById('releaseModal'));
     modal.show();
   } catch (error) {
@@ -385,28 +408,41 @@ const prepareRelease = async (reservation) => {
     alert('Failed to load reservation info.');
   }
 };
+
 const releaseReservation = async () => {
   try {
     const payload = {
       reserve_id: modalData.value.id,
       spot_id: modalData.value.parking_spot_id
     };
-
     const { data } = await axios.post('http://127.0.0.1:5000/release_spot', payload);
-
     alert(data.message);
     bootstrap.Modal.getInstance(document.getElementById('releaseModal'))?.hide();
-
-    modalData.value = {}; 
-    fetchReservations();  
+    modalData.value = {};
+    await fetchReservations();
   } catch (error) {
     console.error('Error releasing spot:', error);
     alert(error.response?.data?.message || 'Failed to release spot.');
   }
 };
-
-
+const ReleaseData= async (reservation) => {
+  try {
+    const { data } = await axios.get(`http://127.0.0.1:5000/api/reservations/${reservation.id}`);
+    modalData.value = {
+      id: data.id,
+      vehicle_no: data.vehicle_no,
+      start_date: data.start_date,
+      start_time: data.start_time || '--:--',
+      parking_lot_name: data.parking_lot_name,
+      parking_spot_id: data.parking_spot_id,
+      cost: data.cost || 0
+    };
+    const modal = new bootstrap.Modal(document.getElementById('dataModal'));
+    modal.show();
+  } catch (error) {
+    console.error('Failed to fetch reservation:', error);
+    alert('Failed to load reservation info.');
+  }
+};
 
 </script>
-
-
