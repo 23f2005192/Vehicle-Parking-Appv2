@@ -2,7 +2,7 @@
   <div class="container mt-5">
     <h1 class="text-center mb-4">{{ message }}</h1>
 
-    
+  
     <div class="mb-3 d-flex justify-content-between align-items-center">
       <button
         v-if="currentView === 'admin'"
@@ -27,16 +27,21 @@
         >
           Users
         </button>
+        <button
+          class="btn btn-secondary ms-2"
+          :class="{ active: currentView === 'summary' }"
+          @click="goToSummary"
+        >
+          Summary
+        </button>
       </div>
+
+      <button class="btn btn-secondary" @click="logout">Logout</button>
     </div>
 
-    
+
     <div v-if="currentView === 'admin'">
-      <div
-        v-if="parkingLots.length === 0"
-        class="d-flex justify-content-center align-items-center flex-column"
-        style="height: 200px;"
-      >
+      <div v-if="parkingLots.length === 0" class="d-flex justify-content-center align-items-center flex-column" style="height: 200px;">
         <p class="text-light">No parking lots available yet.</p>
       </div>
 
@@ -52,47 +57,19 @@
               </div>
               <div class="modal-body">
                 <div class="mb-3">
-                  <input
-                    v-model="form.name"
-                    class="form-control"
-                    placeholder="Name"
-                    required
-                  />
+                  <input v-model="form.name" class="form-control" placeholder="Name" required />
                 </div>
                 <div class="mb-3">
-                  <input
-                    v-model.number="form.price"
-                    class="form-control"
-                    placeholder="Price"
-                    type="number"
-                    required
-                  />
+                  <input v-model.number="form.price" class="form-control" placeholder="Price" type="number" required />
                 </div>
                 <div class="mb-3">
-                  <input
-                    v-model="form.address"
-                    class="form-control"
-                    placeholder="Address"
-                    required
-                  />
+                  <input v-model="form.address" class="form-control" placeholder="Address" required />
                 </div>
                 <div class="mb-3">
-                  <input
-                    v-model.number="form.pincode"
-                    class="form-control"
-                    placeholder="Pincode"
-                    type="number"
-                    required
-                  />
+                  <input v-model.number="form.pincode" class="form-control" placeholder="Pincode" type="number" required />
                 </div>
                 <div class="mb-3">
-                  <input
-                    v-model.number="form.spots"
-                    class="form-control"
-                    placeholder="Spots"
-                    type="number"
-                    required
-                  />
+                  <input v-model.number="form.spots" class="form-control" placeholder="Spots" type="number" min="1" max="7" required />
                 </div>
                 <div v-if="errorMsg" class="alert alert-danger">{{ errorMsg }}</div>
               </div>
@@ -105,7 +82,7 @@
         </div>
       </div>
 
-      
+
       <div v-if="parkingLots.length > 0" class="table-responsive">
         <h3>Available Parking Lots</h3>
         <table class="table table-striped">
@@ -120,7 +97,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="lot in parkingLots" :key="lot.id">
+            <tr v-for="lot in paginatedParkingLots" :key="lot.id">
               <td>{{ lot.name }}</td>
               <td>{{ lot.price }}</td>
               <td>{{ lot.address }}</td>
@@ -136,10 +113,30 @@
             </tr>
           </tbody>
         </table>
+
+  
+        <nav class="mt-3 d-flex justify-content-center" v-if="totalPages > 1">
+          <ul class="pagination">
+            <li class="page-item" :class="{ disabled: currentPage === 1 }">
+              <button class="page-link" @click="currentPage--" :disabled="currentPage === 1">Previous</button>
+            </li>
+            <li
+              v-for="page in totalPages"
+              :key="page"
+              class="page-item"
+              :class="{ active: currentPage === page }"
+            >
+              <button class="page-link" @click="currentPage = page">{{ page }}</button>
+            </li>
+            <li class="page-item" :class="{ disabled: currentPage === totalPages }">
+              <button class="page-link" @click="currentPage++" :disabled="currentPage === totalPages">Next</button>
+            </li>
+          </ul>
+        </nav>
       </div>
     </div>
 
-    
+   
     <div v-if="currentView === 'users' && users.length > 0" class="table-responsive mt-4">
       <h3>User Details</h3>
       <table class="table table-bordered">
@@ -152,7 +149,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="user in users" :key="user.id">
+          <tr v-for="user in paginatedUsers" :key="user.id">
             <td>{{ user.id }}</td>
             <td>{{ user.name }}</td>
             <td>{{ user.address }}</td>
@@ -160,22 +157,49 @@
           </tr>
         </tbody>
       </table>
+
+      <nav class="mt-3 d-flex justify-content-center" v-if="totalUserPages > 1">
+        <ul class="pagination">
+          <li class="page-item" :class="{ disabled: currentUserPage === 1 }">
+            <button class="page-link" @click="currentUserPage--" :disabled="currentUserPage === 1">Previous</button>
+          </li>
+          <li
+            v-for="page in totalUserPages"
+            :key="page"
+            class="page-item"
+            :class="{ active: currentUserPage === page }"
+          >
+            <button class="page-link" @click="currentUserPage = page">{{ page }}</button>
+          </li>
+          <li class="page-item" :class="{ disabled: currentUserPage === totalUserPages }">
+            <button class="page-link" @click="currentUserPage++" :disabled="currentUserPage === totalUserPages">Next</button>
+          </li>
+        </ul>
+      </nav>
+    </div>
+
+
+    <div v-if="currentView === 'summary'" class="mt-4">
+      <h3>Revenue Summary by Parking Lot</h3>
+      <canvas id="summaryChart"></canvas>
     </div>
   </div>
 </template>
-
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import Chart from 'chart.js/auto'
 
 const message = 'Hello, Admin'
 
-const currentView = ref('admin') 
+const currentView = ref('admin')
 const showForm = ref(false)
 const isEditMode = ref(false)
 const editId = ref(null)
 const errorMsg = ref('')
+
 const parkingLots = ref([])
+const users = ref([])
 
 const form = ref({
   name: '',
@@ -185,29 +209,26 @@ const form = ref({
   spots: 1
 })
 
-const users = ref([])
-
-
 const fetchParkingLots = async () => {
   try {
     const response = await axios.get('http://127.0.0.1:5000/get_parkinglots')
     parkingLots.value = response.data
+    currentPage.value = 1
   } catch (error) {
     console.error('Error fetching lots:', error)
   }
 }
 
-
 const fetchUsers = async () => {
   try {
     const response = await axios.get('http://127.0.0.1:5000/get_enrolled_users')
     users.value = response.data
+    currentUserPage.value = 1
     currentView.value = 'users'
   } catch (error) {
     console.error('Error fetching users:', error)
   }
 }
-
 
 const goToAdmin = async () => {
   await fetchParkingLots()
@@ -234,8 +255,8 @@ const closeForm = () => {
 
 const submitForm = async () => {
   errorMsg.value = ''
-  if (form.value.spots <= 0) {
-    errorMsg.value = 'There must be at least one spot'
+  if (form.value.spots <= 0 || form.value.spots > 7) {
+    errorMsg.value = 'Spots must be between 1 and 7'
     return
   }
 
@@ -257,7 +278,79 @@ const viewSpots = (lotId) => {
   window.location.href = `/spots/${lotId}`
 }
 
-onMounted(fetchParkingLots)
-</script>
+const logout = () => {
+  window.location.href = '/'
+}
 
+onMounted(fetchParkingLots)
+
+
+const currentPage = ref(1)
+const itemsPerPage = 7
+const paginatedParkingLots = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  return parkingLots.value.slice(start, start + itemsPerPage)
+})
+const totalPages = computed(() => Math.ceil(parkingLots.value.length / itemsPerPage))
+
+
+const currentUserPage = ref(1)
+const usersPerPage = 7
+const paginatedUsers = computed(() => {
+  const start = (currentUserPage.value - 1) * usersPerPage
+  return users.value.slice(start, start + usersPerPage)
+})
+const totalUserPages = computed(() => Math.ceil(users.value.length / usersPerPage))
+
+// Summary View
+const summaryChart = ref(null)
+const summaryData = ref([])
+
+const goToSummary = async () => {
+  currentView.value = 'summary'
+  await fetchSummaryData()
+  renderChart()
+}
+
+const fetchSummaryData = async () => {
+  try {
+    const response = await axios.get('http://127.0.0.1:5000/summary')
+    summaryData.value = response.data
+  } catch (error) {
+    console.error('Error fetching summary:', error)
+  }
+}
+
+const renderChart = () => {
+  if (summaryChart.value) {
+    summaryChart.value.destroy()
+  }
+
+  const ctx = document.getElementById('summaryChart')
+  const labels = summaryData.value.map(item => item.name)
+  const data = summaryData.value.map(item => item.total_cost)
+
+  summaryChart.value = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Total Revenue (₹)',
+        data,
+        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+        borderColor: 'rgba(54, 162, 235, 1)',
+        borderWidth: 0.5,
+      
+        barThickness: 20 
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  })
+}
+</script>
 

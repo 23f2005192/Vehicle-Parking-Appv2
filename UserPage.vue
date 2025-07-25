@@ -8,7 +8,8 @@
         </span>
         <div class="mx-auto d-flex gap-3">
           <button class="btn btn-outline-primary" @click="goHome">Home</button>
-          <button class="btn btn-outline-primary">Summary</button>
+          <button class="btn btn-outline-primary" @click="showSummary">Summary</button>
+
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#editModal">Edit</button>
@@ -253,6 +254,21 @@
     </div>
   </div>
 </div>
+<div class="modal fade" id="summaryModal" tabindex="-1" aria-labelledby="summaryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content text-dark">
+      <div class="modal-header">
+        <h5 class="modal-title" id="summaryModalLabel">Reservation Summary</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <canvas id="lotChart" height="150"></canvas>
+        <hr />
+        <canvas id="statusChart" height="150"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
 
 </template>
 
@@ -260,6 +276,8 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
+import Chart from 'chart.js/auto';
+
 
 const route = useRoute();
 const router = useRouter();
@@ -389,6 +407,8 @@ const fetchReservations = async () => {
   }
 };
 
+let releaseModalInstance = null;
+
 const prepareRelease = async (reservation) => {
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/api/reservations/${reservation.id}`);
@@ -401,8 +421,9 @@ const prepareRelease = async (reservation) => {
       parking_spot_id: data.parking_spot_id,
       cost: data.cost || 0
     };
-    const modal = new bootstrap.Modal(document.getElementById('releaseModal'));
-    modal.show();
+    const modalEl = document.getElementById('releaseModal');
+    releaseModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    releaseModalInstance.show();
   } catch (error) {
     console.error('Failed to fetch reservation:', error);
     alert('Failed to load reservation info.');
@@ -417,15 +438,18 @@ const releaseReservation = async () => {
     };
     const { data } = await axios.post('http://127.0.0.1:5000/release_spot', payload);
     alert(data.message);
-    bootstrap.Modal.getInstance(document.getElementById('releaseModal'))?.hide();
+    releaseModalInstance?.hide(); 
     modalData.value = {};
-    await fetchReservations();
+    await fetchReservations(); 
   } catch (error) {
     console.error('Error releasing spot:', error);
     alert(error.response?.data?.message || 'Failed to release spot.');
   }
 };
-const ReleaseData= async (reservation) => {
+
+let dataModalInstance = null;
+
+const ReleaseData = async (reservation) => {
   try {
     const { data } = await axios.get(`http://127.0.0.1:5000/api/reservations/${reservation.id}`);
     modalData.value = {
@@ -437,12 +461,67 @@ const ReleaseData= async (reservation) => {
       parking_spot_id: data.parking_spot_id,
       cost: data.cost || 0
     };
-    const modal = new bootstrap.Modal(document.getElementById('dataModal'));
-    modal.show();
+    const modalEl = document.getElementById('dataModal');
+    dataModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    dataModalInstance.show();
   } catch (error) {
     console.error('Failed to fetch reservation:', error);
     alert('Failed to load reservation info.');
   }
 };
+
+const showSummary = async () => {
+  try {
+    const { data } = await axios.get('http://127.0.0.1:5000/api/reservation-data');
+
+  
+    if (window.lotChartInstance) window.lotChartInstance.destroy();
+    if (window.statusChartInstance) window.statusChartInstance.destroy();
+
+    const ctx1 = document.getElementById('lotChart').getContext('2d');
+    window.lotChartInstance = new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: data.reservations_per_lot.labels,
+        datasets: [{
+          label: 'Reservations per Parking Lot',
+          data: data.reservations_per_lot.data,
+          backgroundColor: 'rgba(54, 162, 235, 0.7)'
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    const ctx2 = document.getElementById('statusChart').getContext('2d');
+    window.statusChartInstance = new Chart(ctx2, {
+      type: 'pie',
+      data: {
+        labels: data.status_distribution.labels,
+        datasets: [{
+          label: 'Reservation Status',
+          data: data.status_distribution.data,
+          backgroundColor: ['#4caf50', '#f44336', '#ffc107', '#2196f3']
+        }]
+      },
+      options: {
+        responsive: true
+      }
+    });
+
+  
+    const summaryModal = new bootstrap.Modal(document.getElementById('summaryModal'));
+    summaryModal.show();
+
+  } catch (error) {
+    console.error('Failed to fetch summary data:', error);
+    alert('Could not load reservation summary.');
+  }
+};
+
 
 </script>

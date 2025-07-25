@@ -6,14 +6,20 @@ from sqlalchemy import func
 
 from databse import db, User,ParkingLot,ParkingSpot,Reserve
 
-app = Flask(__name__)
 
+
+
+
+app = Flask(__name__)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///D:/vt/database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)  
 bcrypt = Bcrypt(app)
+  
+
+
 CORS(app)
 
 with app.app_context():
@@ -194,28 +200,44 @@ def get_enrolled_users():
     return jsonify(user_list)
 @app.route("/parkinglot/<int:lot_id>/spots", methods=["GET"])
 def get_spots_for_lot(lot_id):
-   
     lot = ParkingLot.query.get_or_404(lot_id)
-
-   
     spots = ParkingSpot.query.filter_by(parking_lot_id=lot_id).all()
 
-    spots_data = [
-        {
+    spots_data = []
+    for spot in spots:
+        spot_info = {
             "id": spot.id,
             "spot_number": spot.spot_number,
             "status": spot.status
-        } for spot in spots
-    ]
+        }
 
-    
-    lot_data = {
-        "id": lot.id,
-        "name": lot.name,
-        "spots": spots_data
+
+        if spot.status != 'F':
+            reservation = Reserve.query.filter_by(parking_spot_id=spot.id).order_by(Reserve.id.desc()).first()
+
+            if reservation:
+                spot_info["reservation"] = {
+                    "user_id": reservation.user_id,
+                    "user_name": reservation.user.name,
+                    "vehicle_no": reservation.vehicle_no,
+                    "startdate": str(reservation.startdate),
+                    "enddate": str(reservation.enddate),
+                    "starttime": str(reservation.starttime),
+                    "endtime": str(reservation.endtime),
+                    "cost": reservation.cost,
+                    "status": reservation.status
+                }
+
+        spots_data.append(spot_info)
+
+    return {
+        "lot": {
+            "id": lot.id,
+            "name": lot.name,
+            "spots": spots_data
+        }
     }
 
-    return jsonify({"lot": lot_data})
 
 
 
@@ -305,6 +327,13 @@ def reserve_spot():
             )
             db.session.add(reservation)
         db.session.commit()
+             
+
+     
+
+        
+        
+
         return jsonify({"message": "Reservation successful", "spot_id": spot.id}), 200
     except Exception as e:
         db.session.rollback()
@@ -386,6 +415,62 @@ def release_spot():
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Error: {str(e)}'}), 500
+@app.route("/spots/<int:spot_id>", methods=["DELETE"])
+def delete_spot(spot_id):
+    spot = ParkingSpot.query.get_or_404(spot_id)
+    if spot.status != 'F':
+        return {"error": "Cannot delete a reserved spot"}, 400
+
+    db.session.delete(spot)
+    
+    db.session.commit()
+    return {"message": "Spot deleted successfully"}
+
+
+@app.route('/summary', methods=['GET'])
+def get_summary():
+    try:
+        results = (
+            db.session.query(
+                ParkingLot.name,
+                func.coalesce(func.sum(Reserve.cost), 0).label('total_cost')
+            )
+            .join(Reserve, Reserve.parking_lot_id == ParkingLot.id)
+            .group_by(ParkingLot.id, ParkingLot.name)
+            .all()
+        )
+
+        summary = [{'name': r.name, 'total_cost': r.total_cost} for r in results]
+        return jsonify(summary), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reservation-data')
+def reservation_data():
+
+    reservations_per_lot = (
+        db.session.query(ParkingLot.name, func.count(Reserve.id))
+        .join(Reserve)
+        .group_by(ParkingLot.name)
+        .all()
+    )
+
+    status_distribution = (
+        db.session.query(Reserve.status, func.count(Reserve.id))
+        .group_by(Reserve.status)
+        .all()
+    )
+
+    return jsonify({
+        "reservations_per_lot": {
+            "labels": [lot for lot, count in reservations_per_lot],
+            "data": [count for lot, count in reservations_per_lot],
+        },
+        "status_distribution": {
+            "labels": [status for status, count in status_distribution],
+            "data": [count for status, count in status_distribution],
+        }
+    })
 
 
 
